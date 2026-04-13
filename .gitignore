@@ -30,3 +30,6 @@ htmlcov/
 # Local config
 transcriptions.json
 .claude/
+
+# Blackmagic API reference (not ours to distribute)
+README.txt
