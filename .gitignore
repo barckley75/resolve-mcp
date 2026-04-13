@@ -29,3 +29,4 @@ htmlcov/
 
 # Local config
 transcriptions.json
+.claude/

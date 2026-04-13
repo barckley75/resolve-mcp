@@ -4,8 +4,6 @@ JSON-serializable Python dicts. Keeps server.py clean.
 """
 
 import base64
-import io
-import json
 import logging
 import struct
 import zlib
@@ -14,23 +12,24 @@ from typing import Any
 logger = logging.getLogger("ResolveMCP")
 
 
-def folder_to_dict(folder, max_depth: int = 3, max_clips: int = 50, _depth: int = 0) -> dict:
-    """
-    Recursively convert a MediaPool Folder into a serializable dict.
+def _safe(fn, *args, default=None):
+    """Call fn(*args) and return the result, or *default* on any failure."""
+    try:
+        val = fn(*args)
+        return val if val is not None else default
+    except Exception as e:
+        logger.debug("Resolve API call failed (%s): %s", getattr(fn, '__name__', '?'), e)
+        return default
 
-    Args:
-        folder: A Resolve Folder object.
-        max_depth: Maximum recursion depth for subfolders.
-        max_clips: Maximum number of clips to include per folder.
-    """
+
+def folder_to_dict(folder, max_depth: int = 3, max_clips: int = 50, _depth: int = 0) -> dict:
     result = {
-        "name": folder.GetName(),
+        "name": _safe(folder.GetName, default="(unnamed)"),
         "clips": [],
         "subfolders": [],
     }
 
-    # Add clips
-    clips = folder.GetClipList() or []
+    clips = _safe(folder.GetClipList, default=[]) or []
     for i, clip in enumerate(clips):
         if i >= max_clips:
             result["clips"].append(f"... and {len(clips) - max_clips} more clips")
@@ -39,9 +38,8 @@ def folder_to_dict(folder, max_depth: int = 3, max_clips: int = 50, _depth: int 
 
     result["clip_count"] = len(clips)
 
-    # Recurse into subfolders
     if _depth < max_depth:
-        subfolders = folder.GetSubFolderList() or []
+        subfolders = _safe(folder.GetSubFolderList, default=[]) or []
         for sub in subfolders:
             result["subfolders"].append(
                 folder_to_dict(sub, max_depth, max_clips, _depth + 1)
@@ -51,216 +49,185 @@ def folder_to_dict(folder, max_depth: int = 3, max_clips: int = 50, _depth: int 
 
 
 def clip_to_dict_brief(clip) -> dict:
-    """Return a brief summary of a MediaPoolItem (name + key properties)."""
-    result = {"name": clip.GetName()}
+    result = {"name": _safe(clip.GetName, default="(unnamed)")}
     try:
         props = clip.GetClipProperty()
-        if props:
+        if isinstance(props, dict):
             for key in ("Duration", "FPS", "Resolution", "File Path", "Clip Color", "Type"):
-                if key in props and props[key]:
-                    result[key.lower().replace(" ", "_")] = props[key]
-    except Exception:
-        pass
+                val = props.get(key)
+                if val:
+                    result[key.lower().replace(" ", "_")] = val
+    except Exception as e:
+        logger.debug("clip_to_dict_brief: GetClipProperty failed: %s", e)
     return result
 
 
 def clip_to_dict(clip) -> dict:
-    """Return full details of a MediaPoolItem."""
     result = {
-        "name": clip.GetName(),
-        "media_id": clip.GetMediaId(),
+        "name": _safe(clip.GetName, default="(unnamed)"),
     }
 
-    # All properties
+    mid = _safe(clip.GetMediaId)
+    if mid:
+        result["media_id"] = mid
+
     try:
         props = clip.GetClipProperty()
-        if props:
+        if isinstance(props, dict) and props:
             result["properties"] = props
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("clip_to_dict: GetClipProperty failed: %s", e)
 
-    # Markers
-    try:
-        markers = clip.GetMarkers()
-        if markers:
-            result["markers"] = {str(k): v for k, v in markers.items()}
-    except Exception:
-        pass
+    markers = _safe(clip.GetMarkers)
+    if isinstance(markers, dict) and markers:
+        result["markers"] = {str(k): v for k, v in markers.items()}
 
-    # Flags
-    try:
-        flags = clip.GetFlagList()
-        if flags:
-            result["flags"] = flags
-    except Exception:
-        pass
+    flags = _safe(clip.GetFlagList)
+    if flags:
+        result["flags"] = flags
 
-    # Clip color
-    try:
-        color = clip.GetClipColor()
-        if color:
-            result["clip_color"] = color
-    except Exception:
-        pass
+    color = _safe(clip.GetClipColor)
+    if color:
+        result["clip_color"] = color
 
     return result
 
 
 def timeline_to_dict(timeline) -> dict:
-    """Convert a Timeline object into a serializable dict."""
     result = {
-        "name": timeline.GetName(),
-        "start_frame": timeline.GetStartFrame(),
-        "end_frame": timeline.GetEndFrame(),
-        "start_timecode": timeline.GetStartTimecode(),
+        "name": _safe(timeline.GetName, default="(unnamed)"),
     }
 
-    # Track counts
+    start_frame = _safe(timeline.GetStartFrame)
+    if start_frame is not None:
+        result["start_frame"] = start_frame
+
+    end_frame = _safe(timeline.GetEndFrame)
+    if end_frame is not None:
+        result["end_frame"] = end_frame
+
+    start_tc = _safe(timeline.GetStartTimecode)
+    if start_tc:
+        result["start_timecode"] = start_tc
+
     for track_type in ("video", "audio", "subtitle"):
-        try:
-            result[f"{track_type}_track_count"] = timeline.GetTrackCount(track_type)
-        except Exception:
-            result[f"{track_type}_track_count"] = 0
+        count = _safe(timeline.GetTrackCount, track_type, default=0)
+        result[f"{track_type}_track_count"] = count
 
-    # Settings
-    try:
-        for setting in ("timelineFrameRate", "timelineResolutionWidth", "timelineResolutionHeight"):
-            val = timeline.GetSetting(setting)
-            if val:
-                result[setting] = val
-    except Exception:
-        pass
+    for setting in ("timelineFrameRate", "timelineResolutionWidth", "timelineResolutionHeight"):
+        val = _safe(timeline.GetSetting, setting)
+        if val:
+            result[setting] = val
 
-    # Current timecode
-    try:
-        result["current_timecode"] = timeline.GetCurrentTimecode()
-    except Exception:
-        pass
+    tc = _safe(timeline.GetCurrentTimecode)
+    if tc:
+        result["current_timecode"] = tc
 
-    # Markers
-    try:
-        markers = timeline.GetMarkers()
-        if markers:
-            result["markers"] = {str(k): v for k, v in markers.items()}
-    except Exception:
-        pass
+    markers = _safe(timeline.GetMarkers)
+    if isinstance(markers, dict) and markers:
+        result["markers"] = {str(k): v for k, v in markers.items()}
 
     return result
 
 
 def timeline_item_to_dict(item) -> dict:
-    """Convert a TimelineItem into a serializable dict."""
     result = {
-        "name": item.GetName(),
-        "start": item.GetStart(),
-        "end": item.GetEnd(),
-        "duration": item.GetDuration(),
+        "name": _safe(item.GetName, default="(unnamed)"),
     }
 
-    # Source frames
-    try:
-        result["source_start_frame"] = item.GetSourceStartFrame()
-        result["source_end_frame"] = item.GetSourceEndFrame()
-    except Exception:
-        pass
+    for attr, key in [
+        (item.GetStart, "start"),
+        (item.GetEnd, "end"),
+        (item.GetDuration, "duration"),
+    ]:
+        val = _safe(attr)
+        if val is not None:
+            result[key] = val
 
-    # Clip color
-    try:
-        color = item.GetClipColor()
-        if color:
-            result["clip_color"] = color
-    except Exception:
-        pass
+    # Left/right offsets (trimmed frames from source)
+    left = _safe(item.GetLeftOffset)
+    if left is not None:
+        result["left_offset"] = left
+    right = _safe(item.GetRightOffset)
+    if right is not None:
+        result["right_offset"] = right
 
-    # Clip enabled
-    try:
-        result["enabled"] = item.GetClipEnabled()
-    except Exception:
-        pass
+    color = _safe(item.GetClipColor)
+    if color:
+        result["clip_color"] = color
+
+    enabled = _safe(item.GetClipEnabled)
+    if enabled is not None:
+        result["enabled"] = enabled
 
     return result
 
 
 def timeline_item_full_dict(item) -> dict:
-    """Convert a TimelineItem with all properties into a serializable dict."""
     result = timeline_item_to_dict(item)
 
-    # All properties (Pan, Tilt, Zoom, Opacity, Crop, etc.)
+    # All transform/composite properties
     try:
         props = item.GetProperty()
-        if props:
+        if isinstance(props, dict) and props:
             result["properties"] = props
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("GetProperty() failed: %s", e)
+        # Fallback: try fetching known properties individually
+        known_props = {}
+        for key in ("Pan", "Tilt", "ZoomX", "ZoomY", "ZoomGang",
+                     "RotationAngle", "Opacity", "AnchorPointX", "AnchorPointY",
+                     "CropLeft", "CropRight", "CropTop", "CropBottom",
+                     "CropSoftness", "CropRetain", "FlipX", "FlipY",
+                     "CompositeMode", "Scaling", "RetimeProcess"):
+            val = _safe(item.GetProperty, key)
+            if val is not None:
+                known_props[key] = val
+        if known_props:
+            result["properties"] = known_props
 
-    # Markers
-    try:
-        markers = item.GetMarkers()
-        if markers:
-            result["markers"] = {str(k): v for k, v in markers.items()}
-    except Exception:
-        pass
+    markers = _safe(item.GetMarkers)
+    if isinstance(markers, dict) and markers:
+        result["markers"] = {str(k): v for k, v in markers.items()}
 
-    # Flags
-    try:
-        flags = item.GetFlagList()
-        if flags:
-            result["flags"] = flags
-    except Exception:
-        pass
+    flags = _safe(item.GetFlagList)
+    if flags:
+        result["flags"] = flags
 
-    # Fusion comp info
-    try:
-        comp_count = item.GetFusionCompCount()
-        if comp_count and comp_count > 0:
-            result["fusion_comp_count"] = comp_count
-            result["fusion_comp_names"] = item.GetFusionCompNameList()
-    except Exception:
-        pass
+    comp_count = _safe(item.GetFusionCompCount)
+    if comp_count and comp_count > 0:
+        result["fusion_comp_count"] = comp_count
+        names = _safe(item.GetFusionCompNameList)
+        if names:
+            result["fusion_comp_names"] = names
 
-    # Version info
-    try:
-        version = item.GetCurrentVersion()
-        if version:
-            result["current_version"] = version
-    except Exception:
-        pass
-
-    # Track info
-    try:
-        track_info = item.GetTrackTypeAndIndex()
-        if track_info:
-            result["track_type"] = track_info[0]
-            result["track_index"] = track_info[1]
-    except Exception:
-        pass
+    # Media pool item reference
+    mpi = _safe(item.GetMediaPoolItem)
+    if mpi:
+        mpi_name = _safe(mpi.GetName)
+        if mpi_name:
+            result["media_pool_item"] = mpi_name
 
     return result
 
 
 def node_graph_to_dict(graph) -> dict:
-    """Convert a Graph (color node graph) into a serializable dict."""
+    num_nodes = _safe(graph.GetNumNodes, default=0)
     result = {
-        "num_nodes": graph.GetNumNodes(),
+        "num_nodes": num_nodes,
         "nodes": [],
     }
 
-    for i in range(1, graph.GetNumNodes() + 1):
+    for i in range(1, num_nodes + 1):
         node_info = {"index": i}
-        try:
-            node_info["label"] = graph.GetNodeLabel(i)
-        except Exception:
-            node_info["label"] = ""
-        try:
-            lut = graph.GetLUT(i)
-            if lut:
-                node_info["lut"] = lut
-        except Exception:
-            pass
-        try:
-            node_info["tools"] = graph.GetToolsInNode(i)
-        except Exception:
-            pass
+
+        label = _safe(graph.GetNodeLabel, i, default="")
+        node_info["label"] = label
+
+        lut = _safe(graph.GetLUT, i)
+        if lut:
+            node_info["lut"] = lut
+
         result["nodes"].append(node_info)
 
     return result
@@ -270,43 +237,46 @@ def thumbnail_to_png_bytes(thumbnail_data: dict) -> bytes:
     """
     Convert the raw RGB base64 thumbnail data from
     Timeline.GetCurrentClipThumbnailImage() into PNG bytes.
-
-    Uses pure Python (struct + zlib) — no PIL/numpy dependency.
     """
-    width = thumbnail_data["width"]
-    height = thumbnail_data["height"]
-    raw_rgb = base64.b64decode(thumbnail_data["data"])
+    width = thumbnail_data.get("width", 0)
+    height = thumbnail_data.get("height", 0)
+    data = thumbnail_data.get("data", "")
 
-    # Build PNG from raw RGB data
-    def make_png(width: int, height: int, rgb_data: bytes) -> bytes:
-        def chunk(chunk_type: bytes, data: bytes) -> bytes:
-            c = chunk_type + data
+    if not width or not height or not data:
+        raise ValueError(
+            f"Invalid thumbnail data: width={width}, height={height}, data_len={len(data)}"
+        )
+
+    raw_rgb = base64.b64decode(data)
+    expected_size = width * height * 3
+    if len(raw_rgb) < expected_size:
+        raise ValueError(
+            f"Thumbnail data too short: got {len(raw_rgb)} bytes, "
+            f"expected {expected_size} for {width}x{height} RGB"
+        )
+
+    def _make_png(w: int, h: int, rgb: bytes) -> bytes:
+        def chunk(chunk_type: bytes, chunk_data: bytes) -> bytes:
+            c = chunk_type + chunk_data
             crc = struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
-            return struct.pack(">I", len(data)) + c + crc
+            return struct.pack(">I", len(chunk_data)) + c + crc
 
-        # PNG signature
         sig = b"\x89PNG\r\n\x1a\n"
-
-        # IHDR
-        ihdr_data = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)  # 8-bit RGB
+        ihdr_data = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
         ihdr = chunk(b"IHDR", ihdr_data)
 
-        # IDAT — raw pixel rows with filter byte 0 (None) prepended
-        raw_rows = b""
-        row_size = width * 3
-        for y in range(height):
-            raw_rows += b"\x00"  # filter byte
-            raw_rows += rgb_data[y * row_size : (y + 1) * row_size]
+        raw_rows = bytearray()
+        row_size = w * 3
+        for y in range(h):
+            raw_rows += b"\x00"
+            raw_rows += rgb[y * row_size : (y + 1) * row_size]
 
-        compressed = zlib.compress(raw_rows)
-        idat = chunk(b"IDAT", compressed)
-
-        # IEND
+        idat = chunk(b"IDAT", zlib.compress(bytes(raw_rows)))
         iend = chunk(b"IEND", b"")
 
         return sig + ihdr + idat + iend
 
-    return make_png(width, height, raw_rgb)
+    return _make_png(width, height, raw_rgb)
 
 
 def safe_serialize(obj: Any) -> Any:
@@ -319,7 +289,6 @@ def safe_serialize(obj: Any) -> Any:
         return {str(k): safe_serialize(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [safe_serialize(item) for item in obj]
-    # Fallback: try str()
     try:
         return str(obj)
     except Exception:

@@ -1,14 +1,13 @@
 """
 ResolveConnection — manages the connection to a running DaVinci Resolve instance.
 
-Unlike BlenderMCP which needs a TCP socket to communicate with Blender,
 DaVinci Resolve's scripting API is accessible from external Python processes
 via the native fusionscript module. This class handles:
   - Auto-configuring sys.path and environment variables for the Resolve module
   - Connecting to the running Resolve instance
   - Providing fresh accessors for project/timeline/media pool (avoids stale refs)
   - Executing arbitrary Python code with the Resolve API available
-  - Thread safety via a lock around all API calls
+  - Thread safety via an RLock around all API calls
 """
 
 import sys
@@ -18,7 +17,7 @@ import logging
 import threading
 import traceback
 from contextlib import redirect_stdout
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger("ResolveMCP")
 
@@ -31,7 +30,7 @@ _PLATFORM_DEFAULTS = {
     "win32": {
         "script_api": os.path.join(
             os.getenv("PROGRAMDATA", "C:\\ProgramData"),
-            "Blackmagic Design", "DaVinci Resolve", "Support", "Developer", "Scripting"
+            "Blackmagic Design", "DaVinci Resolve", "Support", "Developer", "Scripting",
         ),
         "script_lib": "C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\fusionscript.dll",
     },
@@ -56,13 +55,9 @@ class ResolveConnection:
 
     def __init__(self):
         self.resolve = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # RLock so nested calls don't deadlock
 
     def connect(self) -> bool:
-        """
-        Import DaVinciResolveScript and connect to the running Resolve instance.
-        Returns True on success, False on failure.
-        """
         with self._lock:
             if self.resolve is not None:
                 return True
@@ -74,7 +69,8 @@ class ResolveConnection:
                 if self.resolve is None:
                     logger.error("scriptapp('Resolve') returned None — is DaVinci Resolve running?")
                     return False
-                logger.info("Connected to DaVinci Resolve: %s", self.resolve.GetVersionString())
+                version = self._safe_call(self.resolve.GetVersionString)
+                logger.info("Connected to DaVinci Resolve: %s", version or "unknown version")
                 return True
             except ImportError as e:
                 logger.error("Failed to import DaVinciResolveScript: %s", e)
@@ -88,18 +84,15 @@ class ResolveConnection:
                 return False
 
     def _setup_environment(self):
-        """Configure sys.path and environment variables for the Resolve scripting module."""
         platform_key = _get_platform_key()
         defaults = _PLATFORM_DEFAULTS.get(platform_key, _PLATFORM_DEFAULTS["linux"])
 
-        # Set RESOLVE_SCRIPT_LIB if not already set
         if not os.getenv("RESOLVE_SCRIPT_LIB"):
             lib_path = defaults["script_lib"]
             if os.path.exists(lib_path):
                 os.environ["RESOLVE_SCRIPT_LIB"] = lib_path
                 logger.info("Auto-set RESOLVE_SCRIPT_LIB=%s", lib_path)
 
-        # Add the Modules directory to sys.path
         script_api = os.getenv("RESOLVE_SCRIPT_API", defaults["script_api"])
         modules_path = os.path.join(script_api, "Modules")
         if modules_path not in sys.path:
@@ -107,97 +100,115 @@ class ResolveConnection:
             logger.info("Added to sys.path: %s", modules_path)
 
     def disconnect(self):
-        """Release the Resolve connection."""
         with self._lock:
             self.resolve = None
             logger.info("Disconnected from DaVinci Resolve")
 
+    @staticmethod
+    def _safe_call(fn, *args, **kwargs):
+        """Call a Resolve API function, returning None on failure instead of crashing."""
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            logger.debug("Resolve API call %s failed: %s", getattr(fn, '__name__', fn), e)
+            return None
+
     def _ensure_connected(self):
-        """Raise ConnectionError if not connected."""
         if self.resolve is None:
             raise ConnectionError(
                 "Not connected to DaVinci Resolve. Make sure Resolve is running."
             )
 
-    # ── Accessors (fresh on each call to avoid stale references) ──
+    def is_alive(self) -> bool:
+        """Check whether the connection is still functional."""
+        with self._lock:
+            if self.resolve is None:
+                return False
+            try:
+                pm = self.resolve.GetProjectManager()
+                if pm is None:
+                    return False
+                proj = pm.GetCurrentProject()
+                return proj is not None
+            except Exception:
+                return False
+
+    # ── Accessors (always go through the lock) ──
 
     def get_resolve(self):
-        """Return the Resolve object."""
         with self._lock:
             self._ensure_connected()
             return self.resolve
 
     def get_project_manager(self):
-        """Return the current ProjectManager."""
-        resolve = self.get_resolve()
-        pm = resolve.GetProjectManager()
-        if pm is None:
-            raise RuntimeError("Could not get ProjectManager from Resolve")
-        return pm
+        with self._lock:
+            self._ensure_connected()
+            pm = self.resolve.GetProjectManager()
+            if pm is None:
+                raise RuntimeError("Could not get ProjectManager — is Resolve still running?")
+            return pm
 
     def get_project(self):
-        """Return the currently loaded Project."""
-        pm = self.get_project_manager()
-        project = pm.GetCurrentProject()
-        if project is None:
-            raise RuntimeError("No project is currently open in DaVinci Resolve")
-        return project
+        with self._lock:
+            self._ensure_connected()
+            pm = self.resolve.GetProjectManager()
+            if pm is None:
+                raise RuntimeError("Could not get ProjectManager — is Resolve still running?")
+            project = pm.GetCurrentProject()
+            if project is None:
+                raise RuntimeError("No project is currently open in DaVinci Resolve")
+            return project
 
     def get_media_pool(self):
-        """Return the MediaPool for the current project."""
         project = self.get_project()
-        mp = project.GetMediaPool()
-        if mp is None:
-            raise RuntimeError("Could not get MediaPool from current project")
-        return mp
+        with self._lock:
+            mp = project.GetMediaPool()
+            if mp is None:
+                raise RuntimeError("Could not get MediaPool from current project")
+            return mp
 
     def get_current_timeline(self):
-        """Return the current Timeline, or None if no timeline is active."""
         project = self.get_project()
-        return project.GetCurrentTimeline()
+        with self._lock:
+            return project.GetCurrentTimeline()
 
     def get_media_storage(self):
-        """Return the MediaStorage object."""
-        resolve = self.get_resolve()
-        ms = resolve.GetMediaStorage()
-        if ms is None:
-            raise RuntimeError("Could not get MediaStorage from Resolve")
-        return ms
+        with self._lock:
+            self._ensure_connected()
+            ms = self.resolve.GetMediaStorage()
+            if ms is None:
+                raise RuntimeError("Could not get MediaStorage from Resolve")
+            return ms
 
     def get_gallery(self):
-        """Return the Gallery object for the current project."""
         project = self.get_project()
-        gallery = project.GetGallery()
-        if gallery is None:
-            raise RuntimeError("Could not get Gallery from current project")
-        return gallery
+        with self._lock:
+            gallery = project.GetGallery()
+            if gallery is None:
+                raise RuntimeError("Could not get Gallery from current project")
+            return gallery
 
     # ── Code execution ──
 
     def execute_code(self, code: str) -> str:
         """
-        Execute arbitrary Python code with Resolve API objects available in the namespace.
+        Execute arbitrary Python code with Resolve API objects in the namespace.
 
-        Available variables:
-          - resolve: the Resolve object
-          - project: current project
-          - mediaPool: current media pool
-          - timeline: current timeline (may be None)
-          - mediaStorage: media storage object
-
+        Available variables: resolve, project, mediaPool, timeline, mediaStorage
         Captured stdout is returned as a string.
         """
         with self._lock:
             self._ensure_connected()
 
-            # Build namespace
             project = None
             media_pool = None
             timeline = None
             media_storage = None
 
             try:
-                project = self.resolve.GetProjectManager().GetCurrentProject()
+                pm = self.resolve.GetProjectManager()
+                if pm:
+                    project = pm.GetCurrentProject()
             except Exception:
                 pass
             if project:
@@ -227,7 +238,6 @@ class ResolveConnection:
                 with redirect_stdout(stdout_capture):
                     exec(code, namespace)
                 output = stdout_capture.getvalue()
-                # Check if there's a 'result' variable set by the user code
                 if "result" in namespace and namespace["result"] is not None:
                     result_val = namespace["result"]
                     if output:
@@ -241,29 +251,28 @@ class ResolveConnection:
 
 # ── Module-level singleton ──
 
-_resolve_connection: ResolveConnection | None = None
+_resolve_connection: Optional[ResolveConnection] = None
 
 
 def get_resolve_connection() -> ResolveConnection:
     """Get or create a persistent ResolveConnection singleton."""
     global _resolve_connection
 
-    if _resolve_connection is None:
-        _resolve_connection = ResolveConnection()
-        if not _resolve_connection.connect():
-            _resolve_connection = None
-            raise ConnectionError(
-                "Could not connect to DaVinci Resolve. "
-                "Make sure Resolve is running and scripting is enabled in Preferences."
-            )
-        logger.info("Created new ResolveConnection")
+    if _resolve_connection is not None and _resolve_connection.is_alive():
+        return _resolve_connection
 
-    # Validate the connection is still alive
-    try:
-        _resolve_connection.get_project()
-    except Exception:
-        logger.warning("Existing connection is stale, reconnecting...")
+    # Either no connection or it went stale — (re)create
+    if _resolve_connection is not None:
+        logger.warning("Existing Resolve connection is stale, reconnecting...")
+
+    conn = ResolveConnection()
+    if not conn.connect():
         _resolve_connection = None
-        return get_resolve_connection()
+        raise ConnectionError(
+            "Could not connect to DaVinci Resolve. "
+            "Make sure Resolve is running and scripting is enabled in Preferences."
+        )
 
+    _resolve_connection = conn
+    logger.info("ResolveConnection ready")
     return _resolve_connection
