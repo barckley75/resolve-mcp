@@ -4,6 +4,20 @@ Connect **DaVinci Resolve Studio** to **Claude AI** through the [Model Context P
 
 > **Note:** This is a third-party integration and is not created by or affiliated with Blackmagic Design.
 
+## Demo
+
+<p align="center">
+  <img src="assets/screenshot-color-page.png" alt="Claude controlling DaVinci Resolve Color page" width="800">
+</p>
+
+### Color Grading with Claude
+
+<video src="assets/demo-color-grading.mp4" controls width="800"></video>
+
+### Local Transcription & Subtitles
+
+<video src="assets/demo-transcription.mp4" controls width="800"></video>
+
 ## Features
 
 ### Core
@@ -30,6 +44,13 @@ Connect **DaVinci Resolve Studio** to **Claude AI** through the [Model Context P
 - **Scene Cut Detection** — auto-detect and cut at scene boundaries
 - **Subtitle Generation** — AI speech-to-text with multi-language support
 - **Voice Isolation** — separate speech from background noise
+
+### Local Transcription (Apple Silicon)
+- **mlx-whisper** transcription running locally on your Mac's Neural Engine / GPU
+- Auto-chunks long files with ffmpeg (5-min pieces) — no timeouts on hour-long clips
+- Returns compact timestamped transcript inline for immediate use
+- Saves SRT file next to source for Resolve subtitle import
+- Multiple model sizes: tiny (fastest) to large (most accurate), default: turbo
 
 ### Rendering
 - Browse available formats and codecs
@@ -182,6 +203,12 @@ Make sure DaVinci Resolve Studio is running with a project open, then talk to Cl
 > "Enable Voice Isolation on audio track 1"  
 > "Stabilize the second clip on video track 1"
 
+### Transcription
+> "Transcribe ~/Videos/interview.mp4"  
+> "Transcribe this clip in French using the large model"  
+> "Export an SRT file from ~/Videos/podcast.wav to ~/Desktop/podcast.srt"  
+> "Transcribe the audio and add subtitle markers to the timeline"
+
 ### Fusion
 > "List all Fusion compositions on the first clip"  
 > "Add a Fusion composition to clip 2"  
@@ -196,7 +223,7 @@ Make sure DaVinci Resolve Studio is running with a project open, then talk to Cl
 ### Power Tool
 > "Run this code: print(project.GetSetting('timelineFrameRate'))"
 
-## Available Tools (48)
+## Available Tools (52)
 
 | Category | Tools |
 |---|---|
@@ -211,6 +238,7 @@ Make sure DaVinci Resolve Studio is running with a project open, then talk to Cl
 | **Fusion** | `get_fusion_comp_list`, `add_fusion_comp`, `import_fusion_comp`, `export_fusion_comp`, `load_fusion_comp`, `delete_fusion_comp`, `rename_fusion_comp`, `create_fusion_clip`, `insert_fusion_generator`, `insert_fusion_composition`, `insert_fusion_title` |
 | **Export** | `export_timeline`, `export_current_frame` |
 | **Thumbnail** | `get_current_thumbnail` |
+| **Local Transcription** | `transcribe_audio`, `transcribe_and_add_subtitles`, `export_srt`, `list_whisper_models` |
 | **Code Execution** | `execute_resolve_code` |
 
 ## Troubleshooting
