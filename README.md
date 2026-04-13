@@ -12,11 +12,11 @@ Connect **DaVinci Resolve Studio** to **Claude AI** through the [Model Context P
 
 ### Color Grading with Claude
 
-<video src="assets/demo-color-grading.mp4" controls width="800"></video>
+![Color grading demo](assets/demo-color-grading.gif)
 
 ### Local Transcription & Subtitles
 
-<video src="assets/demo-transcription.mp4" controls width="800"></video>
+![Transcription demo](assets/demo-transcription.gif)
 
 ## Features
 
