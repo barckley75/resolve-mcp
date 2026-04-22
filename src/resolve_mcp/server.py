@@ -1322,7 +1322,7 @@ def export_current_frame(file_path: str) -> str:
 def _find_resolve_window_id() -> int | None:
     """Find the CGWindowID of the main DaVinci Resolve window via Quartz."""
     try:
-        import Quartz
+        import Quartz  # type: ignore[import-not-found]  # macOS-only
         windows = Quartz.CGWindowListCopyWindowInfo(
             Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID
         )
