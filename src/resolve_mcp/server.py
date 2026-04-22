@@ -9,6 +9,8 @@ from mcp.server.fastmcp import FastMCP, Image
 import json
 import logging
 import os
+import subprocess
+import tempfile
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Any, List, Optional
 
@@ -1314,6 +1316,73 @@ def export_current_frame(file_path: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════
+#  SCREENSHOT (give Claude eyes)
+# ═══════════════════════════════════════════════════════════════════
+
+def _find_resolve_window_id() -> int | None:
+    """Find the CGWindowID of the main DaVinci Resolve window via Quartz."""
+    try:
+        import Quartz
+        windows = Quartz.CGWindowListCopyWindowInfo(
+            Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID
+        )
+        for w in windows:
+            owner = w.get("kCGWindowOwnerName", "")
+            if "DaVinci Resolve" in str(owner):
+                layer = w.get("kCGWindowLayer", 999)
+                # Main window is layer 0, skip menus/tooltips
+                if layer == 0:
+                    return w.get("kCGWindowNumber")
+    except ImportError:
+        pass
+    return None
+
+
+def _capture_screenshot() -> bytes:
+    """Capture Resolve window (or full screen as fallback). Returns PNG bytes."""
+    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    tmp.close()
+    try:
+        wid = _find_resolve_window_id()
+        if wid is not None:
+            r = subprocess.run(
+                ["screencapture", "-x", "-l", str(wid), tmp.name],
+                capture_output=True,
+            )
+        else:
+            r = subprocess.run(
+                ["screencapture", "-x", tmp.name],
+                capture_output=True,
+            )
+        if r.returncode != 0:
+            raise RuntimeError(
+                "screencapture failed. Grant Screen Recording permission to "
+                "the host app in System Settings > Privacy & Security > Screen Recording."
+            )
+        with open(tmp.name, "rb") as f:
+            return f.read()
+    finally:
+        os.unlink(tmp.name)
+
+
+@mcp.tool()
+def screenshot() -> Image:
+    """
+    Take a screenshot of DaVinci Resolve so you can SEE the current state.
+    Call this frequently — before and after changes, when the user describes
+    something visual, or whenever you need to verify what's on screen.
+    Captures the Resolve window directly. Works on any page.
+    """
+    try:
+        png_data = _capture_screenshot()
+        if not png_data:
+            raise RuntimeError("Screenshot captured but file was empty")
+        return Image(data=png_data, format="png")
+    except Exception as e:
+        raise RuntimeError(f"Error taking screenshot: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════
 #  AUDIO
 # ═══════════════════════════════════════════════════════════════════
 
@@ -1604,7 +1673,17 @@ def editing_strategy() -> str:
     """Defines the recommended workflow for editing in DaVinci Resolve"""
     return """When working with DaVinci Resolve through MCP, follow this workflow:
 
+    0. USE screenshot() TO SEE WHAT YOU'RE DOING:
+       - BEFORE making changes: take a screenshot to understand the current state
+       - AFTER making changes: take a screenshot to verify the result
+       - When the user describes something visual ("this clip looks too dark",
+         "the timeline is messy"), take a screenshot to see what they see
+       - When debugging why something failed, take a screenshot
+       - When the user asks "what does it look like?" or "how does it look?", screenshot
+       - Think of it like looking at your monitor — do it frequently
+
     1. ALWAYS start by checking the current state:
+       - Use screenshot() to see the Resolve UI
        - Use get_project_info() to understand the project
        - Use get_current_timeline_info() to see the active timeline
        - Use get_current_page() to know which page you're on
@@ -1658,8 +1737,10 @@ def editing_strategy() -> str:
        - Use execute_resolve_code() to run arbitrary Python
        - The Resolve Python API is comprehensive — most operations are possible
 
-    IMPORTANT: DaVinci Resolve must be running for all tools to work.
-    Some features require the Color page. AI features require Resolve Studio 19+.
+    IMPORTANT:
+    - DaVinci Resolve must be running for all tools to work.
+    - Some features require the Color page. AI features require Resolve Studio 19+.
+    - USE screenshot() LIBERALLY. It is your eyes. Look before you act, look after you act.
     """
 
 

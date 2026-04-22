@@ -4,6 +4,8 @@ Connect **DaVinci Resolve Studio** to **Claude AI** through the [Model Context P
 
 > **Note:** This is a third-party integration and is not created by or affiliated with Blackmagic Design.
 
+> **Platform support:** The core Resolve control (48 tools) works on **macOS, Windows, and Linux**. The local transcription tools and the `screenshot` tool are **macOS-only** (they rely on Apple Silicon's `mlx-whisper` and macOS-specific screen capture APIs).
+
 ## Demo
 
 <p align="center">
@@ -45,12 +47,19 @@ Connect **DaVinci Resolve Studio** to **Claude AI** through the [Model Context P
 - **Subtitle Generation** — AI speech-to-text with multi-language support
 - **Voice Isolation** — separate speech from background noise
 
-### Local Transcription (Apple Silicon)
+### Local Transcription (macOS / Apple Silicon only)
 - **mlx-whisper** transcription running locally on your Mac's Neural Engine / GPU
 - Auto-chunks long files with ffmpeg (5-min pieces) — no timeouts on hour-long clips
 - Returns compact timestamped transcript inline for immediate use
 - Saves SRT file next to source for Resolve subtitle import
 - Multiple model sizes: tiny (fastest) to large (most accurate), default: turbo
+- **Windows/Linux users:** these tools are unavailable (MLX is Apple-only). The other 48 tools work fine.
+
+### Screenshot (macOS only)
+- `screenshot` — captures the Resolve window so Claude can visually inspect what's on screen
+- Uses macOS `screencapture` + Quartz to target the Resolve window directly
+- Needs Screen Recording permission for Claude Desktop in System Settings
+- **Windows/Linux users:** this tool is unavailable
 
 ### Rendering
 - Browse available formats and codecs
@@ -238,7 +247,8 @@ Make sure DaVinci Resolve Studio is running with a project open, then talk to Cl
 | **Fusion** | `get_fusion_comp_list`, `add_fusion_comp`, `import_fusion_comp`, `export_fusion_comp`, `load_fusion_comp`, `delete_fusion_comp`, `rename_fusion_comp`, `create_fusion_clip`, `insert_fusion_generator`, `insert_fusion_composition`, `insert_fusion_title` |
 | **Export** | `export_timeline`, `export_current_frame` |
 | **Thumbnail** | `get_current_thumbnail` |
-| **Local Transcription** | `transcribe_audio`, `transcribe_and_add_subtitles`, `export_srt`, `list_whisper_models` |
+| **Local Transcription** _(macOS only)_ | `transcribe_audio`, `transcribe_and_add_subtitles`, `export_srt`, `list_whisper_models` |
+| **Screenshot** _(macOS only)_ | `screenshot` |
 | **Code Execution** | `execute_resolve_code` |
 
 ## Troubleshooting
@@ -267,9 +277,23 @@ Make sure DaVinci Resolve Studio is running with a project open, then talk to Cl
 - Some tools require being on a specific page (e.g., thumbnails require the Color page).
 - The server connects to whichever project is currently open — switching projects in Resolve is reflected immediately.
 
+## Disclaimer
+
+**USE AT YOUR OWN RISK.** This software is provided "as is", without warranty of any kind, express or implied. By using ResolveMCP you acknowledge and accept that:
+
+- This is an **unofficial, third-party project** — not created by, affiliated with, endorsed by, or supported by Blackmagic Design or Anthropic.
+- It is designed to control DaVinci Resolve Studio through an AI assistant. AI agents can make mistakes: they may **modify, overwrite, or delete** your projects, timelines, clips, render queues, or files on disk.
+- The `execute_resolve_code` tool executes **arbitrary Python code** with full access to the Resolve API and your filesystem. Inspect code before allowing execution.
+- The `screenshot` tool captures the DaVinci Resolve window (or the full screen as a fallback). **These images are sent to the AI provider** (Anthropic) for analysis. Anything visible in the screenshot — client footage, unreleased material, personal content, notifications, passwords, other apps in the background — may be transmitted. Only use it when you're comfortable with what's on screen, and be aware of your NDAs and privacy obligations.
+- **Always work on a backup of your project.** Save often. Use Resolve's built-in project backups (Project Manager → right-click → Backups). Keep media outside the project folder if it matters to you.
+- The authors and contributors accept **no liability** for lost work, corrupted projects, missed deadlines, wasted render time, accidental uploads/exports, API charges, or any other damages arising from use of this software.
+- You are responsible for reviewing what the AI is about to do before approving tool calls in your MCP client.
+
+If this is production work on a client project, don't let the AI drive unsupervised. Watch the tool calls, keep backups, render proofs.
+
 ## License
 
-MIT
+MIT — see full text in the `LICENSE` file (or in [LICENSE](LICENSE) once added). The MIT license specifically disclaims all warranties and liability; this section above restates that in plain English.
 
 ## Acknowledgments
 
