@@ -112,12 +112,26 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ### Step 1: Configure Claude Desktop
 
-Edit your Claude Desktop configuration file:
+`claude_desktop_config.json` is Claude Desktop's settings file. It tells Claude Desktop which MCP servers to launch on startup (and some app preferences).
+
+You need to edit this file to register ResolveMCP. It is **not** inside the Claude app itself — it lives in your user folder:
 
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
-Add the `mcpServers` entry:
+> If the file doesn't exist yet, just create it — the commands below will do that for you.
+
+Open (or create) it from a terminal:
+
+```bash
+# macOS
+open -e "$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+
+# Windows (PowerShell)
+notepad "$env:APPDATA\Claude\claude_desktop_config.json"
+```
+
+Add the `mcpServers` entry (if the file already has other servers, add `"resolve"` inside the existing `"mcpServers"` object — don't create a second one):
 
 ```json
 {
