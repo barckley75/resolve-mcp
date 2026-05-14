@@ -6,6 +6,8 @@ Connect **DaVinci Resolve Studio** to **Claude AI** through the [Model Context P
 
 > **Platform support:** The core Resolve control (48 tools) works on **macOS, Windows, and Linux**. The local transcription tools and the `screenshot` tool are **macOS-only** (they rely on Apple Silicon's `mlx-whisper` and macOS-specific screen capture APIs).
 
+> ⚠️ **Install only from this repository.** This project is **not on PyPI** — running `uvx resolve-mcp` or `pip install resolve-mcp` will fetch an **unrelated package by a different author** with the same name. Always follow the [Installation](#installation) steps below (git clone + `uv --directory`).
+
 ## Demo
 
 <p align="center">
@@ -110,6 +112,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## Installation
 
+> ⚠️ **Don't `pip install` or `uvx` this — install from this repo only.** The package name `resolve-mcp` on PyPI is a different, unrelated project. Follow the steps below to clone and run from source.
+
 ### Step 1: Configure Claude Desktop
 
 `claude_desktop_config.json` is Claude Desktop's settings file. It tells Claude Desktop which MCP servers to launch on startup (and some app preferences).
@@ -131,22 +135,38 @@ open -e "$HOME/Library/Application Support/Claude/claude_desktop_config.json"
 notepad "$env:APPDATA\Claude\claude_desktop_config.json"
 ```
 
-Add the `mcpServers` entry (if the file already has other servers, add `"resolve"` inside the existing `"mcpServers"` object — don't create a second one):
+First, clone this repo and install its dependencies:
+
+```bash
+git clone https://github.com/barckley75/resolve-mcp.git
+cd resolve-mcp
+uv sync
+```
+
+Then add the `mcpServers` entry to your config file (if the file already has other servers, add `"resolve"` inside the existing `"mcpServers"` object — don't create a second one). Replace `/absolute/path/to/resolve-mcp` with the path where you cloned the repo:
 
 ```json
 {
   "mcpServers": {
     "resolve": {
-      "command": "uvx",
-      "args": ["resolve-mcp"],
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/absolute/path/to/resolve-mcp",
+        "run",
+        "resolve-mcp"
+      ],
       "env": {
         "RESOLVE_SCRIPT_LIB": "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/fusionscript.so",
+        "RESOLVE_SCRIPT_API": "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting",
         "PYTHONPATH": "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting/Modules/"
       }
     }
   }
 }
 ```
+
+> If `uv` isn't on Claude Desktop's `PATH`, use the full path — find it with `which uv` (macOS/Linux) or `where.exe uv` (Windows). On macOS via Homebrew it's typically `/opt/homebrew/bin/uv`.
 
 <details>
 <summary>Windows environment variables</summary>
@@ -155,16 +175,24 @@ Add the `mcpServers` entry (if the file already has other servers, add `"resolve
 {
   "mcpServers": {
     "resolve": {
-      "command": "uvx",
-      "args": ["resolve-mcp"],
+      "command": "uv",
+      "args": [
+        "--directory",
+        "C:\\absolute\\path\\to\\resolve-mcp",
+        "run",
+        "resolve-mcp"
+      ],
       "env": {
         "RESOLVE_SCRIPT_LIB": "C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\fusionscript.dll",
+        "RESOLVE_SCRIPT_API": "C:\\ProgramData\\Blackmagic Design\\DaVinci Resolve\\Support\\Developer\\Scripting",
         "PYTHONPATH": "C:\\ProgramData\\Blackmagic Design\\DaVinci Resolve\\Support\\Developer\\Scripting\\Modules\\"
       }
     }
   }
 }
 ```
+
+If you installed Resolve on a non-default drive (e.g. `D:\`), update `RESOLVE_SCRIPT_LIB` to point at the actual location of `fusionscript.dll`. The `RESOLVE_SCRIPT_API` / `PYTHONPATH` paths stay under `C:\ProgramData\` regardless of where Resolve itself was installed.
 
 </details>
 
@@ -175,10 +203,16 @@ Add the `mcpServers` entry (if the file already has other servers, add `"resolve
 {
   "mcpServers": {
     "resolve": {
-      "command": "uvx",
-      "args": ["resolve-mcp"],
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/absolute/path/to/resolve-mcp",
+        "run",
+        "resolve-mcp"
+      ],
       "env": {
         "RESOLVE_SCRIPT_LIB": "/opt/resolve/libs/Fusion/fusionscript.so",
+        "RESOLVE_SCRIPT_API": "/opt/resolve/Developer/Scripting",
         "PYTHONPATH": "/opt/resolve/Developer/Scripting/Modules/"
       }
     }
