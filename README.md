@@ -3,10 +3,10 @@
 Connect **DaVinci Resolve Studio** to **Claude AI** through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), enabling AI-assisted video editing, color grading, Fusion compositing, and more — all through natural language.
 
 > **Note:** This is a third-party integration and is not created by or affiliated with Blackmagic Design.
+>
+> ⚠️ **Use at your own risk.** This project is intended for testing and experimentation. **Do not use in production.** AI-assisted tools can modify or delete your project data — always work on backups.
 
-> **Platform support:** The core Resolve control (48 tools) works on **macOS, Windows, and Linux**. The local transcription tools and the `screenshot` tool are **macOS-only** (they rely on Apple Silicon's `mlx-whisper` and macOS-specific screen capture APIs).
-
-> ⚠️ **Install only from this repository.** This project is **not on PyPI** — running `uvx resolve-mcp` or `pip install resolve-mcp` will fetch an **unrelated package by a different author** with the same name. Always follow the [Installation](#installation) steps below (git clone + `uv --directory`).
+> **Platform support:** Tested only on **macOS** (Apple Silicon). The Blackmagic scripting API is cross-platform, so the core 48 Resolve-control tools may work on Windows and Linux as well, but this is unverified. The local transcription tools and the `screenshot` tool are **macOS-only** (they rely on `mlx-whisper` and macOS-specific screen-capture APIs).
 
 ## Demo
 
@@ -112,38 +112,36 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## Installation
 
-> ⚠️ **Don't `pip install` or `uvx` this — install from this repo only.** The package name `resolve-mcp` on PyPI is a different, unrelated project. Follow the steps below to clone and run from source.
+### Step 1: Clone this repo
 
-### Step 1: Configure Claude Desktop
+```bash
+git clone https://github.com/barckley75/resolve-claude-mcp.git
+cd resolve-claude-mcp
+uv sync
+```
 
-`claude_desktop_config.json` is Claude Desktop's settings file. It tells Claude Desktop which MCP servers to launch on startup (and some app preferences).
+Note the **absolute path** to the folder you just cloned — you'll need it in Step 2.
 
-You need to edit this file to register ResolveMCP. It is **not** inside the Claude app itself — it lives in your user folder:
+### Step 2: Tell Claude Desktop about this server
+
+Claude Desktop has a settings file called **`claude_desktop_config.json`** that lists every MCP server it should launch on startup. You need to add an entry to that file so Claude Desktop knows about ResolveMCP.
+
+The file lives in your **user folder** (not inside the Claude app):
 
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
-> If the file doesn't exist yet, just create it — the commands below will do that for you.
-
-Open (or create) it from a terminal:
+Open it (or create it if it doesn't exist — these commands will create a blank file you can fill in):
 
 ```bash
-# macOS
+# macOS — opens in TextEdit
 open -e "$HOME/Library/Application Support/Claude/claude_desktop_config.json"
 
-# Windows (PowerShell)
+# Windows (PowerShell) — opens in Notepad
 notepad "$env:APPDATA\Claude\claude_desktop_config.json"
 ```
 
-First, clone this repo and install its dependencies:
-
-```bash
-git clone https://github.com/barckley75/resolve-mcp.git
-cd resolve-mcp
-uv sync
-```
-
-Then add the `mcpServers` entry to your config file (if the file already has other servers, add `"resolve"` inside the existing `"mcpServers"` object — don't create a second one). Replace `/absolute/path/to/resolve-mcp` with the path where you cloned the repo:
+When the editor opens, paste in the JSON below. Replace `/absolute/path/to/resolve-claude-mcp` with the path to the folder you cloned in Step 1. If the file already has other MCP servers in it, just add the `"resolve"` block inside the existing `"mcpServers"` object — don't create a second `"mcpServers"`.
 
 ```json
 {
@@ -152,9 +150,9 @@ Then add the `mcpServers` entry to your config file (if the file already has oth
       "command": "uv",
       "args": [
         "--directory",
-        "/absolute/path/to/resolve-mcp",
+        "/absolute/path/to/resolve-claude-mcp",
         "run",
-        "resolve-mcp"
+        "resolve-claude-mcp"
       ],
       "env": {
         "RESOLVE_SCRIPT_LIB": "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/fusionscript.so",
@@ -178,9 +176,9 @@ Then add the `mcpServers` entry to your config file (if the file already has oth
       "command": "uv",
       "args": [
         "--directory",
-        "C:\\absolute\\path\\to\\resolve-mcp",
+        "C:\\absolute\\path\\to\\resolve-claude-mcp",
         "run",
-        "resolve-mcp"
+        "resolve-claude-mcp"
       ],
       "env": {
         "RESOLVE_SCRIPT_LIB": "C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\fusionscript.dll",
@@ -206,9 +204,9 @@ If you installed Resolve on a non-default drive (e.g. `D:\`), update `RESOLVE_SC
       "command": "uv",
       "args": [
         "--directory",
-        "/absolute/path/to/resolve-mcp",
+        "/absolute/path/to/resolve-claude-mcp",
         "run",
-        "resolve-mcp"
+        "resolve-claude-mcp"
       ],
       "env": {
         "RESOLVE_SCRIPT_LIB": "/opt/resolve/libs/Fusion/fusionscript.so",
@@ -222,13 +220,13 @@ If you installed Resolve on a non-default drive (e.g. `D:\`), update `RESOLVE_SC
 
 </details>
 
-### Step 2: Enable Scripting in Resolve
+### Step 3: Enable Scripting in Resolve
 
 1. Open DaVinci Resolve Studio
 2. Go to **Preferences > General**
 3. Under **External scripting using**, select **Local** (or **Network** if running remotely)
 
-### Step 3: Restart Claude Desktop
+### Step 4: Restart Claude Desktop
 
 Quit and reopen the Claude Desktop app. You should see the ResolveMCP tools available (hammer icon).
 

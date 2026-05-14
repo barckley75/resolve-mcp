@@ -1,5 +1,5 @@
 [project]
-name = "resolve-mcp"
+name = "resolve-claude-mcp"
 version = "0.1.0"
 description = "DaVinci Resolve Studio integration through the Model Context Protocol"
 readme = "README.md"
@@ -20,7 +20,7 @@ transcription = [
 ]
 
 [project.scripts]
-resolve-mcp = "resolve_mcp.server:main"
+resolve-claude-mcp = "resolve_claude_mcp.server:main"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

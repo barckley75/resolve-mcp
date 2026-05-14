@@ -30,7 +30,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` and add:
         "--directory",
         "/Volumes/Mac mini/Projects/resolve-mcp",
         "run",
-        "resolve-mcp"
+        "resolve-claude-mcp"
       ],
       "env": {
         "RESOLVE_SCRIPT_LIB": "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/fusionscript.so",
@@ -41,9 +41,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` and add:
 }
 ```
 
-Key differences from the `uvx` install in the main README:
-- `command` is the full path to `uv` (not `uvx`)
-- `--directory` points to this repo so any code changes are picked up immediately
+This config uses the **full path** to `uv` (avoids `PATH` issues when Claude Desktop launches the server) and points `--directory` at this repo so any code changes are picked up immediately.
 
 If `uv` lives somewhere else, check with:
 

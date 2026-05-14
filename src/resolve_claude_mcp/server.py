@@ -1538,7 +1538,7 @@ def transcribe_audio(
         return (
             "mlx-whisper is not installed. Install with:\n"
             "  uv pip install 'mlx-whisper>=0.4.3'\n"
-            "Or: pip install 'resolve-mcp[transcription]'"
+            "Or: pip install 'resolve-claude-mcp[transcription]'"
         )
     except Exception as e:
         return f"Error: {e}"

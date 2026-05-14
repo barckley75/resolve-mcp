@@ -1027,7 +1027,7 @@ wheels = [
 ]
 
 [[package]]
-name = "resolve-mcp"
+name = "resolve-claude-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
