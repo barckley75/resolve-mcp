@@ -1,4 +1,4 @@
-# ResolveMCP
+# Resolve Claude MCP
 
 Connect **DaVinci Resolve Studio** to **Claude AI** through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), enabling AI-assisted video editing, color grading, Fusion compositing, and more — all through natural language.
 
@@ -75,13 +75,13 @@ Connect **DaVinci Resolve Studio** to **Claude AI** through the [Model Context P
 
 ## Architecture
 
-Unlike BlenderMCP which requires a socket-based addon, ResolveMCP connects directly to DaVinci Resolve via its native scripting API. This means a simpler, single-process architecture:
+Unlike BlenderMCP which requires a socket-based addon, Resolve Claude MCP connects directly to DaVinci Resolve via its native scripting API. This means a simpler, single-process architecture:
 
 ```
 Claude AI (MCP Client)
     |
     v
-ResolveMCP Server (FastMCP)
+Resolve Claude MCP Server (FastMCP)
     |
     v
 DaVinciResolveScript (fusionscript.so)
@@ -124,7 +124,7 @@ Note the **absolute path** to the folder you just cloned — you'll need it in S
 
 ### Step 2: Tell Claude Desktop about this server
 
-Claude Desktop has a settings file called **`claude_desktop_config.json`** that lists every MCP server it should launch on startup. You need to add an entry to that file so Claude Desktop knows about ResolveMCP.
+Claude Desktop has a settings file called **`claude_desktop_config.json`** that lists every MCP server it should launch on startup. You need to add an entry to that file so Claude Desktop knows about Resolve Claude MCP.
 
 The file lives in your **user folder** (not inside the Claude app):
 
@@ -228,7 +228,7 @@ If you installed Resolve on a non-default drive (e.g. `D:\`), update `RESOLVE_SC
 
 ### Step 4: Restart Claude Desktop
 
-Quit and reopen the Claude Desktop app. You should see the ResolveMCP tools available (hammer icon).
+Quit and reopen the Claude Desktop app. You should see the Resolve Claude MCP tools available (hammer icon).
 
 ## Usage
 
@@ -325,7 +325,7 @@ Make sure DaVinci Resolve Studio is running with a project open, then talk to Cl
 
 ## Disclaimer
 
-**USE AT YOUR OWN RISK.** This software is provided "as is", without warranty of any kind, express or implied. By using ResolveMCP you acknowledge and accept that:
+**USE AT YOUR OWN RISK.** This software is provided "as is", without warranty of any kind, express or implied. By using Resolve Claude MCP you acknowledge and accept that:
 
 - This is an **unofficial, third-party project** — not created by, affiliated with, endorsed by, or supported by Blackmagic Design or Anthropic.
 - It is designed to control DaVinci Resolve Studio through an AI assistant. AI agents can make mistakes: they may **modify, overwrite, or delete** your projects, timelines, clips, render queues, or files on disk.
@@ -339,7 +339,7 @@ If this is production work on a client project, don't let the AI drive unsupervi
 
 ## License
 
-MIT — see full text in the `LICENSE` file (or in [LICENSE](LICENSE) once added). The MIT license specifically disclaims all warranties and liability; this section above restates that in plain English.
+MIT — see [LICENSE](LICENSE). The MIT license specifically disclaims all warranties and liability; the Disclaimer section above restates that in plain English.
 
 ## Acknowledgments
 
